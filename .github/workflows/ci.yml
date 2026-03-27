@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    name: Build, Test & Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 30
+
+      - name: Post coverage summary
+        if: always()
+        run: |
+          echo "## Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat coverage/lcov.info | node -e "
+            const lines = require('fs').readFileSync('/dev/stdin','utf8').split('\n');
+            let lf=0,lh=0,fns=0,fnh=0,br=0,brh=0;
+            for(const l of lines){
+              if(l.startsWith('LF:')) lf+=+l.slice(3);
+              if(l.startsWith('LH:')) lh+=+l.slice(3);
+              if(l.startsWith('FNF:')) fns+=+l.slice(4);
+              if(l.startsWith('FNH:')) fnh+=+l.slice(4);
+              if(l.startsWith('BRF:')) br+=+l.slice(4);
+              if(l.startsWith('BRH:')) brh+=+l.slice(4);
+            }
+            const pct = (h,f) => f===0 ? 'N/A' : (h/f*100).toFixed(1)+'%';
+            console.log('Statements : '+pct(lh,lf)+' ('+lh+'/'+lf+')');
+            console.log('Functions  : '+pct(fnh,fns)+' ('+fnh+'/'+fns+')');
+            console.log('Branches   : '+pct(brh,br)+' ('+brh+'/'+br+')');
+          " >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
